@@ -71,6 +71,11 @@ pub mod attestor;
 pub mod error;
 pub mod hash;
 
+/// Optional audit-stream-py producer. Gated behind the `audit-stream`
+/// Cargo feature so the core crypto crate stays sync and HTTP-free.
+#[cfg(feature = "audit-stream")]
+pub mod audit_stream;
+
 pub use attestation::Attestation;
 pub use attestor::Attestor;
 pub use error::AttestationError;

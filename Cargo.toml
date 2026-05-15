@@ -1,9 +1,9 @@
 [package]
 name        = "hash-attestation"
-version     = "0.1.0"
+version     = "0.1.1"
 edition     = "2021"
-rust-version = "1.86"
-description = "Sign and verify Kinetic Gain Protocol Suite documents using ed25519 over canonical JSON hashes. The missing 'this AEO actually came from the vendor' layer."
+rust-version = "1.88"
+description = "Sign and verify Kinetic Gain Protocol Suite documents using ed25519 over canonical JSON hashes. The missing 'this AEO actually came from the vendor' layer. Optional audit-stream-py integration via the `audit-stream` feature."
 license     = "MIT"
 repository  = "https://github.com/mizcausevic-dev/hash-attestation-rs"
 homepage    = "https://kineticgain.com/"
@@ -13,6 +13,13 @@ keywords    = ["attestation", "ed25519", "kinetic-gain", "canonical-json", "sign
 categories  = ["cryptography", "data-structures"]
 authors     = ["Miz Causevic <miz@kineticgain.com>"]
 
+[features]
+default      = []
+# Opt-in HTTP emitter that POSTs attestation_signed / attestation_verified /
+# attestation_failed events to audit-stream-py. Pulls in reqwest + tokio.
+# Off by default so the core crypto crate stays sync and HTTP-free.
+audit-stream = ["dep:reqwest", "dep:tokio"]
+
 [dependencies]
 serde      = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -21,10 +28,19 @@ sha2       = "0.10"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 base64     = "0.22"
 rand_core  = { version = "0.6", features = ["std"] }
+# Optional, only pulled in when the `audit-stream` feature is enabled.
+reqwest    = { version = "0.12", default-features = false, features = ["json", "rustls-tls"], optional = true }
+tokio      = { version = "1.38", features = ["rt", "macros", "time"], optional = true }
 
 [dev-dependencies]
 rand_core  = { version = "0.6", features = ["std"] }
 criterion  = "0.5"
+wiremock   = "0.6"
+tokio      = { version = "1.38", features = ["rt", "macros", "time"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[bench]]
 name    = "sign_verify"

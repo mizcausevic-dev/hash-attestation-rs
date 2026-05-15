@@ -43,6 +43,31 @@ impl Attestor {
     pub fn key_url(&self) -> &str {
         &self.key_url
     }
+
+    /// Sign `body`, **and** fire an `attestation_signed` event to the
+    /// audit-stream spine. Same semantics as [`Attestor::sign`] — the
+    /// emit is best-effort and never blocks the signature.
+    ///
+    /// Available only with the `audit-stream` feature.
+    #[cfg(feature = "audit-stream")]
+    pub async fn sign_with_audit<T: Serialize>(
+        &self,
+        client: &reqwest::Client,
+        body: &T,
+    ) -> Result<Attestation, AttestationError> {
+        let signed = self.sign(body)?;
+        crate::audit_stream::emit(
+            client,
+            "attestation_signed",
+            serde_json::json!({
+                "key_url": signed.key_url,
+                "signed_hash": signed.signed_hash,
+                "signed_at": signed.signed_at,
+            }),
+        )
+        .await;
+        Ok(signed)
+    }
 }
 
 /// A trust set — `key_url -> VerifyingKey`. Callers register known keys
@@ -86,5 +111,36 @@ impl Verifier {
             return Err(AttestationError::UntrustedKey(attestation.key_url.clone()));
         };
         attestation.verify(key, body)
+    }
+
+    /// Verify an attestation **and** fire an `attestation_verified` (or
+    /// `attestation_failed`) event to the audit-stream spine. Same
+    /// semantics as [`Verifier::verify`] — the emit is best-effort and
+    /// never blocks the verification result.
+    ///
+    /// Available only with the `audit-stream` feature.
+    #[cfg(feature = "audit-stream")]
+    pub async fn verify_with_audit<T: Serialize>(
+        &self,
+        client: &reqwest::Client,
+        attestation: &Attestation,
+        body: &T,
+    ) -> Result<(), AttestationError> {
+        let outcome = self.verify(attestation, body);
+        let (kind, reason) = match &outcome {
+            Ok(()) => ("attestation_verified", None),
+            Err(err) => ("attestation_failed", Some(err.to_string())),
+        };
+        let mut payload = serde_json::json!({
+            "key_url": attestation.key_url,
+            "signed_hash": attestation.signed_hash,
+            "signed_at": attestation.signed_at,
+            "trusted_keys": self.keys.len(),
+        });
+        if let Some(r) = reason {
+            payload["reason"] = serde_json::Value::String(r);
+        }
+        crate::audit_stream::emit(client, kind, payload).await;
+        outcome
     }
 }
