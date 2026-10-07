@@ -1,0 +1,23 @@
+{
+  "profile": "jcs-rfc8785-v1",
+  "body": {
+    "decision_card_version": "0.1",
+    "decision_id": "TEST-001",
+    "issued_at": "2026-10-07T12:00:00Z",
+    "buyer": {"id": "buyer-1", "name": "Test Buyer", "type": "school-district"},
+    "decision": {"status": "approved", "effective_until": "2026-12-31T00:00:00Z"},
+    "subject": {"vendor_name": "AcmeTutor", "vendor_id": "vendor-1"},
+    "rationale": "Approved after review."
+  },
+  "canonical_body": "{\"buyer\":{\"id\":\"buyer-1\",\"name\":\"Test Buyer\",\"type\":\"school-district\"},\"decision\":{\"effective_until\":\"2026-12-31T00:00:00Z\",\"status\":\"approved\"},\"decision_card_version\":\"0.1\",\"decision_id\":\"TEST-001\",\"issued_at\":\"2026-10-07T12:00:00Z\",\"rationale\":\"Approved after review.\",\"subject\":{\"vendor_id\":\"vendor-1\",\"vendor_name\":\"AcmeTutor\"}}",
+  "signed_hash": "sha256:e8924577948f1fd79eae6a3541e8ed61dd64c41ad1a69ebf6ea0ebe16b627ca3",
+  "attestation": {
+    "algorithm": "ed25519",
+    "hash_profile": "jcs-rfc8785-v1",
+    "signed_hash": "sha256:e8924577948f1fd79eae6a3541e8ed61dd64c41ad1a69ebf6ea0ebe16b627ca3",
+    "signature": "tCT0O11Rp2yGzRqLTxgSn11lnQehw0DjEMPZOiYLvibqVV5Dlz5Wb8r0EXA5bl3xw5DQnL3isRDYZVJQi48CAA==",
+    "key_url": "https://buyer.example/.well-known/keys/decision-card",
+    "signed_at": "2026-10-07T12:00:00Z"
+  },
+  "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+}

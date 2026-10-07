@@ -45,6 +45,7 @@ fn wrong_key_fails_verify() {
 fn unsupported_algorithm_rejected() {
     let mut signed = Attestation {
         algorithm: "rsa-sha256".to_string(),
+        hash_profile: None,
         signed_hash: "sha256:00".to_string(),
         signature: "AAAA".to_string(),
         key_url: "https://x/".to_string(),
@@ -127,9 +128,51 @@ fn vendor_specific_verification_rejects_another_trusted_vendor() {
 #[test]
 fn advisory_timestamp_is_not_authenticated() {
     let (key, attestor) = keypair_and_attestor("https://acme.example/keys/aeo");
-    let mut signed = attestor.sign(&body()).unwrap();
+    let mut signed = attestor.sign_legacy(&body()).unwrap();
     signed.signed_at = "1900-01-01T00:00:00Z".to_string();
     assert!(signed.verify(&key.verifying_key(), &body()).is_ok());
+}
+
+#[test]
+fn v2_metadata_is_authenticated() {
+    let (key, attestor) = keypair_and_attestor("https://acme.example/keys/aeo");
+    let signed = attestor.sign(&body()).unwrap();
+    assert_eq!(signed.hash_profile.as_deref(), Some("jcs-rfc8785-v1"));
+
+    let mut changed_time = signed.clone();
+    changed_time.signed_at = "1900-01-01T00:00:00Z".to_string();
+    assert!(matches!(
+        changed_time.verify(&key.verifying_key(), &body()),
+        Err(AttestationError::BadSignature)
+    ));
+
+    let mut changed_url = signed.clone();
+    changed_url.key_url = "https://other.example/keys/aeo".to_string();
+    assert!(matches!(
+        changed_url.verify(&key.verifying_key(), &body()),
+        Err(AttestationError::BadSignature)
+    ));
+
+    let mut changed_algorithm = signed.clone();
+    changed_algorithm.algorithm = "rsa-sha256".to_string();
+    assert!(matches!(
+        changed_algorithm.verify(&key.verifying_key(), &body()),
+        Err(AttestationError::UnsupportedAlgorithm(_))
+    ));
+
+    let mut removed_profile = signed.clone();
+    removed_profile.hash_profile = None;
+    assert!(matches!(
+        removed_profile.verify(&key.verifying_key(), &body()),
+        Err(AttestationError::BadSignature)
+    ));
+
+    let mut unknown_profile = signed;
+    unknown_profile.hash_profile = Some("unrecognized".to_string());
+    assert!(matches!(
+        unknown_profile.verify(&key.verifying_key(), &body()),
+        Err(AttestationError::UnsupportedHashProfile(_))
+    ));
 }
 
 #[test]
@@ -146,4 +189,17 @@ fn signed_at_is_z_suffixed() {
     let (_key, attestor) = keypair_and_attestor("https://acme.example/keys/aeo");
     let signed = attestor.sign(&body()).unwrap();
     assert!(signed.signed_at.ends_with('Z'), "got: {}", signed.signed_at);
+}
+
+#[test]
+fn wire_record_rejects_ambiguous_or_unsigned_extra_fields() {
+    let (_key, attestor) = keypair_and_attestor("https://acme.example/keys/aeo");
+    let signed = attestor.sign(&body()).unwrap();
+    let mut wire = serde_json::to_value(&signed).unwrap();
+    wire["hash_profile"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<Attestation>(wire).is_err());
+
+    let mut wire = serde_json::to_value(&signed).unwrap();
+    wire["vendor_identity"] = "unspecified".into();
+    assert!(serde_json::from_value::<Attestation>(wire).is_err());
 }

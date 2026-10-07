@@ -35,6 +35,14 @@ pub enum AttestationError {
     #[error("unsupported algorithm: {0}")]
     UnsupportedAlgorithm(String),
 
+    /// The attestation declares an unknown canonical hash profile.
+    #[error("unsupported hash profile: {0}")]
+    UnsupportedHashProfile(String),
+
+    /// Input cannot be represented unambiguously by the JCS profile.
+    #[error("invalid JCS input: {0}")]
+    InvalidJcsInput(String),
+
     /// The attestation's key URL was absent from the trust set or did not
     /// match the caller's independently expected URL.
     #[error("untrusted key URL: {0}")]

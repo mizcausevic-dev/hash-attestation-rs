@@ -2,8 +2,8 @@
 //!
 //! Sign JSON document hashes with Ed25519 and verify them against a public
 //! key the caller already trusts. The crate does not establish vendor identity
-//! or fetch keys. See the README for key binding, unsigned metadata, and
-//! cross-language canonicalization limits.
+//! or fetch keys. See the README for key binding, legacy unsigned metadata,
+//! and the versioned RFC 8785 format.
 //!
 //! ```
 //! use hash_attestation::{Attestation, Attestor, Verifier};
@@ -37,14 +37,15 @@ pub mod attestation;
 pub mod attestor;
 pub mod error;
 pub mod hash;
+mod validate;
 
 /// Optional audit-stream-py producer. Gated behind the `audit-stream`
 /// Cargo feature so the core crypto crate stays sync and HTTP-free.
 #[cfg(feature = "audit-stream")]
 pub mod audit_stream;
 
-pub use attestation::Attestation;
+pub use attestation::{Attestation, JCS_HASH_PROFILE};
 pub use attestor::Attestor;
 pub use attestor::Verifier;
 pub use error::AttestationError;
-pub use hash::canonical_hash;
+pub use hash::{canonical_hash, canonical_hash_jcs, parse_jcs_json_strict};

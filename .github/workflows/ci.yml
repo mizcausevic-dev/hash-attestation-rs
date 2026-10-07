@@ -31,28 +31,34 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
 
+      - name: Audit locked dependency graph
+        if: matrix.toolchain == 'stable'
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked --root "$RUNNER_TEMP/cargo-audit"
+          "$RUNNER_TEMP/cargo-audit/bin/cargo-audit" audit --file Cargo.lock
+
       - name: Format
         if: matrix.toolchain == 'stable'
         run: cargo fmt --all -- --check
 
       - name: Clippy
         if: matrix.toolchain == 'stable'
-        run: cargo clippy --all-targets -- -Dwarnings
+        run: cargo clippy --locked --all-targets -- -Dwarnings
 
       - name: Build
-        run: cargo build --all-targets
+        run: cargo build --locked --all-targets
 
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test --locked --all-targets
 
       - name: Doc tests
-        run: cargo test --doc
+        run: cargo test --locked --doc
 
       # Exercise the optional audit-stream producer too.
       - name: Clippy (audit-stream feature)
         if: matrix.toolchain == 'stable'
-        run: cargo clippy --features audit-stream --all-targets -- -Dwarnings
+        run: cargo clippy --locked --features audit-stream --all-targets -- -Dwarnings
 
       - name: Test (audit-stream feature)
         if: matrix.toolchain == 'stable'
-        run: cargo test --features audit-stream --all-targets
+        run: cargo test --locked --features audit-stream --all-targets

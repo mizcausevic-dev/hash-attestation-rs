@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::attestation::Attestation;
 use crate::error::AttestationError;
-use crate::hash::canonical_hash;
+use crate::hash::{canonical_hash, canonical_hash_jcs, parse_jcs_json_strict};
 
 /// Wraps a signing key and a key URL selector. The crate does not fetch or
 /// authenticate the key at that URL.
@@ -22,9 +22,26 @@ impl Attestor {
         Self { key, key_url }
     }
 
-    /// Sign `body` and return an [`Attestation`] that captures the canonical
-    /// hash + signature + key URL + timestamp.
+    /// Sign `body` with the RFC 8785 v0.2 format, binding the hash profile,
+    /// key URL, and signer-asserted timestamp to the signature.
     pub fn sign<T: Serialize>(&self, body: &T) -> Result<Attestation, AttestationError> {
+        let signed_hash = canonical_hash_jcs(body)?;
+        let mut attestation = Attestation::new_v2(signed_hash, self.key_url.clone());
+        let signature = self.key.sign(&attestation.signing_input_v2()?);
+        attestation.set_signature(&signature.to_bytes());
+        Ok(attestation)
+    }
+
+    /// Sign untrusted raw JSON with the v0.2 format after strict I-JSON input
+    /// checks. Use this entry point when the source is a JSON text stream.
+    pub fn sign_raw_json(&self, raw_body: &str) -> Result<Attestation, AttestationError> {
+        let body = parse_jcs_json_strict(raw_body)?;
+        self.sign(&body)
+    }
+
+    /// Sign using the legacy v0.1 format for migrations. The legacy signature
+    /// covers only the hash text; key URL and timestamp remain unauthenticated.
+    pub fn sign_legacy<T: Serialize>(&self, body: &T) -> Result<Attestation, AttestationError> {
         let signed_hash = canonical_hash(body)?;
         let signature = self.key.sign(signed_hash.as_bytes());
         Ok(Attestation::new(
@@ -129,6 +146,18 @@ impl Verifier {
             return Err(AttestationError::UntrustedKey(attestation.key_url.clone()));
         }
         self.verify(attestation, body)
+    }
+
+    /// Verify an untrusted raw JSON body for an independently expected key
+    /// URL. Rejects duplicate keys and unsafe integer literals before parse.
+    pub fn verify_raw_json_for_key_url(
+        &self,
+        expected_key_url: &str,
+        attestation: &Attestation,
+        raw_body: &str,
+    ) -> Result<(), AttestationError> {
+        let body = parse_jcs_json_strict(raw_body)?;
+        self.verify_for_key_url(expected_key_url, attestation, &body)
     }
 
     /// Verify an attestation **and** fire an `attestation_verified` (or
