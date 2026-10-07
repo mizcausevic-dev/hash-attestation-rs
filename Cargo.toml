@@ -1,14 +1,15 @@
 [package]
 name        = "hash-attestation"
-version     = "0.1.1"
+version     = "0.2.0"
 edition     = "2021"
 rust-version = "1.88"
-description = "Sign and verify Kinetic Gain Protocol Suite documents using ed25519 over canonical JSON hashes. The missing 'this AEO actually came from the vendor' layer. Optional audit-stream-py integration via the `audit-stream` feature."
+description = "Sign JSON document hashes with Ed25519 and verify them against independently trusted public keys."
 license     = "MIT"
 repository  = "https://github.com/mizcausevic-dev/hash-attestation-rs"
 homepage    = "https://kineticgain.com/"
 documentation = "https://docs.rs/hash-attestation"
 readme      = "README.md"
+include     = ["src/**/*.rs", "tests/**/*.rs", "tests/vectors/**/*.json", "examples/**/*.rs", "benches/**/*.rs", "README.md", "LICENSE"]
 keywords    = ["attestation", "ed25519", "kinetic-gain", "canonical-json", "signature"]
 categories  = ["cryptography", "data-structures"]
 authors     = ["Miz Causevic <miz@kineticgain.com>"]
@@ -23,6 +24,7 @@ audit-stream = ["dep:reqwest", "dep:tokio"]
 [dependencies]
 serde      = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_json_canonicalizer = "=0.3.2"
 thiserror  = "1.0"
 sha2       = "0.10"
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }

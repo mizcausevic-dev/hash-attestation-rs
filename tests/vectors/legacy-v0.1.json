@@ -1,0 +1,12 @@
+{
+  "body": {"name": "Café"},
+  "signed_hash": "sha256:659906f125d844f7081786e4a1cba739414e49a9b9061d80ce09c691b5f56602",
+  "attestation": {
+    "algorithm": "ed25519",
+    "signed_hash": "sha256:659906f125d844f7081786e4a1cba739414e49a9b9061d80ce09c691b5f56602",
+    "signature": "m8Un2QBxweGd2lnWWZ+/YPKW12MUWlpuesLVsK9oNPQRfG6OOPkJcCdxu11Gtjc4EBDPNbjlADJW9M3dtqA4BQ==",
+    "key_url": "https://vendor.example/.well-known/keys/aeo",
+    "signed_at": "2026-10-07T12:00:00Z"
+  },
+  "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+}

@@ -4,14 +4,69 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
 jobs:
+  verify:
+    name: verify (${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, "1.88.0"]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master, 2026-10-07
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - name: Audit locked dependency graph
+        if: matrix.toolchain == 'stable'
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked --root "$RUNNER_TEMP/cargo-audit"
+          "$RUNNER_TEMP/cargo-audit/bin/cargo-audit" audit --file Cargo.lock
+      - name: Format
+        if: matrix.toolchain == 'stable'
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        if: matrix.toolchain == 'stable'
+        run: cargo clippy --locked --all-targets -- -Dwarnings
+      - name: Test
+        run: cargo test --locked --all-targets
+      - name: Doc tests
+        run: cargo test --locked --doc
+      - name: Clippy (audit-stream feature)
+        if: matrix.toolchain == 'stable'
+        run: cargo clippy --locked --features audit-stream --all-targets -- -Dwarnings
+      - name: Test (audit-stream feature)
+        run: cargo test --locked --features audit-stream --all-targets
+
   publish:
     name: cargo publish
+    needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require tagged commit on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          tagged_commit=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          if ! git merge-base --is-ancestor "$tagged_commit" refs/remotes/origin/main; then
+            echo "::error::tagged commit is not reachable from main"
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master, 2026-10-07
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
       - name: Verify Cargo.toml version matches tag
         run: |
           TAG=${GITHUB_REF_NAME#v}
@@ -21,8 +76,8 @@ jobs:
             exit 1
           fi
       - name: Dry-run publish
-        run: cargo publish --dry-run --allow-dirty
+        run: cargo publish --locked --dry-run
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --allow-dirty
+        run: cargo publish --locked

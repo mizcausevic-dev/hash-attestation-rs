@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-Dwarnings"
@@ -19,12 +22,20 @@ jobs:
       matrix:
         toolchain: [stable, beta, "1.88.0"]
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master, 2026-10-07
         with:
           toolchain: ${{ matrix.toolchain }}
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+
+      - name: Audit locked dependency graph
+        if: matrix.toolchain == 'stable'
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked --root "$RUNNER_TEMP/cargo-audit"
+          "$RUNNER_TEMP/cargo-audit/bin/cargo-audit" audit --file Cargo.lock
 
       - name: Format
         if: matrix.toolchain == 'stable'
@@ -32,22 +43,22 @@ jobs:
 
       - name: Clippy
         if: matrix.toolchain == 'stable'
-        run: cargo clippy --all-targets -- -Dwarnings
+        run: cargo clippy --locked --all-targets -- -Dwarnings
 
       - name: Build
-        run: cargo build --all-targets
+        run: cargo build --locked --all-targets
 
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test --locked --all-targets
 
       - name: Doc tests
-        run: cargo test --doc
+        run: cargo test --locked --doc
 
       # Exercise the optional audit-stream producer too.
       - name: Clippy (audit-stream feature)
         if: matrix.toolchain == 'stable'
-        run: cargo clippy --features audit-stream --all-targets -- -Dwarnings
+        run: cargo clippy --locked --features audit-stream --all-targets -- -Dwarnings
 
       - name: Test (audit-stream feature)
         if: matrix.toolchain == 'stable'
-        run: cargo test --features audit-stream --all-targets
+        run: cargo test --locked --features audit-stream --all-targets

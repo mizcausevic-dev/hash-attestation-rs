@@ -1,0 +1,22 @@
+{
+  "profile": "jcs-rfc8785-v1",
+  "body": {
+    "name": "Café",
+    "x": 1e-7,
+    "negzero": -0.0,
+    "דּ": "Hebrew",
+    "😀": "Emoji",
+    "nested": {"b": 2, "a": 1}
+  },
+  "canonical_body": "{\"name\":\"Café\",\"negzero\":0,\"nested\":{\"a\":1,\"b\":2},\"x\":1e-7,\"😀\":\"Emoji\",\"דּ\":\"Hebrew\"}",
+  "signed_hash": "sha256:2ec69677ffa05c1cb85954219ca2065693bd7b7d0f028ff4fbbc1974baac61a8",
+  "attestation": {
+    "algorithm": "ed25519",
+    "hash_profile": "jcs-rfc8785-v1",
+    "signed_hash": "sha256:2ec69677ffa05c1cb85954219ca2065693bd7b7d0f028ff4fbbc1974baac61a8",
+    "signature": "080Io/0nKVkZa6DGRkfyl32dGaIIyoY0T17NNRnUZjAdEckaaas+KohIabqdUflBQ9VpdrMN5FPtUbrqVEb3DA==",
+    "key_url": "https://vendor.example/.well-known/keys/aeo",
+    "signed_at": "2026-10-07T12:00:00Z"
+  },
+  "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+}

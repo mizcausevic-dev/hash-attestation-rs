@@ -25,13 +25,13 @@ fn hash_string_starts_with_sha256_prefix() {
 
 #[test]
 fn hash_is_stable_across_runs() {
-    // Hard-coded expected hash for `{"a":1,"b":[true,null]}` after canonicalisation.
+    // Golden hash for `{"a":1,"b":[true,null]}` after canonicalisation.
     let v = serde_json::json!({"b": [true, null], "a": 1});
     let h = canonical_hash(&v).unwrap();
-    // The exact value matters less than that it never drifts.
-    // Compute the same canonical form via a separate input:
-    let v2 = serde_json::json!({"a": 1, "b": [true, null]});
-    assert_eq!(h, canonical_hash(&v2).unwrap());
+    assert_eq!(
+        h,
+        "sha256:1cc69c7fa23616ca2ec3ee70d24390a6225c8832db8a4c814c7e0e7f942f8668"
+    );
 }
 
 #[test]
@@ -39,4 +39,24 @@ fn whitespace_in_string_values_preserved() {
     let a = serde_json::json!({"name": "Acme  Inc."});
     let b = serde_json::json!({"name": "Acme Inc."});
     assert_ne!(canonical_hash(&a).unwrap(), canonical_hash(&b).unwrap());
+}
+
+#[test]
+fn numeric_exponent_hash_locks_current_rust_format() {
+    let v = serde_json::json!({"x": 1e-7});
+    assert_eq!(serde_json::to_string(&v).unwrap(), r#"{"x":1e-7}"#);
+    assert_eq!(
+        canonical_hash(&v).unwrap(),
+        "sha256:43c8e92bd5552bd45030718eb9366d6d6500623793c248666d77dca01ba337c0"
+    );
+}
+
+#[test]
+fn unicode_hash_locks_current_rust_format() {
+    let v = serde_json::json!({"name": "Café"});
+    assert_eq!(serde_json::to_string(&v).unwrap(), r#"{"name":"Café"}"#);
+    assert_eq!(
+        canonical_hash(&v).unwrap(),
+        "sha256:659906f125d844f7081786e4a1cba739414e49a9b9061d80ce09c691b5f56602"
+    );
 }

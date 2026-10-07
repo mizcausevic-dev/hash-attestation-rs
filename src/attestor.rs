@@ -7,10 +7,10 @@ use serde::Serialize;
 
 use crate::attestation::Attestation;
 use crate::error::AttestationError;
-use crate::hash::canonical_hash;
+use crate::hash::{canonical_hash, canonical_hash_jcs, parse_jcs_json_strict};
 
-/// Wraps a signing key + the well-known URL the verifier will fetch the
-/// matching public key from.
+/// Wraps a signing key and a key URL selector. The crate does not fetch or
+/// authenticate the key at that URL.
 pub struct Attestor {
     key: SigningKey,
     key_url: String,
@@ -22,9 +22,26 @@ impl Attestor {
         Self { key, key_url }
     }
 
-    /// Sign `body` and return an [`Attestation`] that captures the canonical
-    /// hash + signature + key URL + timestamp.
+    /// Sign `body` with the RFC 8785 v0.2 format, binding the hash profile,
+    /// key URL, and signer-asserted timestamp to the signature.
     pub fn sign<T: Serialize>(&self, body: &T) -> Result<Attestation, AttestationError> {
+        let signed_hash = canonical_hash_jcs(body)?;
+        let mut attestation = Attestation::new_v2(signed_hash, self.key_url.clone());
+        let signature = self.key.sign(&attestation.signing_input_v2()?);
+        attestation.set_signature(&signature.to_bytes());
+        Ok(attestation)
+    }
+
+    /// Sign untrusted raw JSON with the v0.2 format after strict I-JSON input
+    /// checks. Use this entry point when the source is a JSON text stream.
+    pub fn sign_raw_json(&self, raw_body: &str) -> Result<Attestation, AttestationError> {
+        let body = parse_jcs_json_strict(raw_body)?;
+        self.sign(&body)
+    }
+
+    /// Sign using the legacy v0.1 format for migrations. The legacy signature
+    /// covers only the hash text; key URL and timestamp remain unauthenticated.
+    pub fn sign_legacy<T: Serialize>(&self, body: &T) -> Result<Attestation, AttestationError> {
         let signed_hash = canonical_hash(body)?;
         let signature = self.key.sign(signed_hash.as_bytes());
         Ok(Attestation::new(
@@ -45,8 +62,8 @@ impl Attestor {
     }
 
     /// Sign `body`, **and** fire an `attestation_signed` event to the
-    /// audit-stream spine. Same semantics as [`Attestor::sign`] — the
-    /// emit is best-effort and never blocks the signature.
+    /// audit-stream spine. The emit is best-effort: failure does not change
+    /// the signature result, but the call can wait for its timeout.
     ///
     /// Available only with the `audit-stream` feature.
     #[cfg(feature = "audit-stream")]
@@ -71,7 +88,8 @@ impl Attestor {
 }
 
 /// A trust set — `key_url -> VerifyingKey`. Callers register known keys
-/// up-front, then verify attestations by url-lookup.
+/// up-front, then verify attestations by URL lookup. The URL is only a
+/// selector; callers must establish key ownership independently.
 #[derive(Debug, Default, Clone)]
 pub struct Verifier {
     keys: HashMap<String, VerifyingKey>,
@@ -100,8 +118,10 @@ impl Verifier {
         self.keys.is_empty()
     }
 
-    /// Verify an attestation. The attestation's `key_url` must match a
-    /// previously-trusted key.
+    /// Verify an attestation against any key in the trust set. The
+    /// attestation's `key_url` must match a previously-trusted key. This does
+    /// not prove the document belongs to a particular vendor; use
+    /// [`Self::verify_for_key_url`] when that identity matters.
     pub fn verify<T: Serialize>(
         &self,
         attestation: &Attestation,
@@ -113,10 +133,38 @@ impl Verifier {
         attestation.verify(key, body)
     }
 
+    /// Verify for one expected key URL, established independently of the
+    /// attestation. This prevents a document signed by another trusted vendor
+    /// from satisfying a vendor-specific check.
+    pub fn verify_for_key_url<T: Serialize>(
+        &self,
+        expected_key_url: &str,
+        attestation: &Attestation,
+        body: &T,
+    ) -> Result<(), AttestationError> {
+        if attestation.key_url != expected_key_url {
+            return Err(AttestationError::UntrustedKey(attestation.key_url.clone()));
+        }
+        self.verify(attestation, body)
+    }
+
+    /// Verify an untrusted raw JSON body for an independently expected key
+    /// URL. Rejects duplicate keys and unsafe integer literals before parse.
+    pub fn verify_raw_json_for_key_url(
+        &self,
+        expected_key_url: &str,
+        attestation: &Attestation,
+        raw_body: &str,
+    ) -> Result<(), AttestationError> {
+        let body = parse_jcs_json_strict(raw_body)?;
+        self.verify_for_key_url(expected_key_url, attestation, &body)
+    }
+
     /// Verify an attestation **and** fire an `attestation_verified` (or
     /// `attestation_failed`) event to the audit-stream spine. Same
-    /// semantics as [`Verifier::verify`] — the emit is best-effort and
-    /// never blocks the verification result.
+    /// semantics as [`Verifier::verify`] — the emit is best-effort. Failure
+    /// does not change the verification result, but the call can wait for its
+    /// timeout. Use [`Self::verify_for_key_url`] for vendor-specific checks.
     ///
     /// Available only with the `audit-stream` feature.
     #[cfg(feature = "audit-stream")]
