@@ -80,6 +80,10 @@ cargo package --locked --list
 
 CI targets stable, beta, and Rust 1.88.0 (MSRV). The tracked `Cargo.lock` pins the review and publishing dependency graph; downstream applications still resolve their own dependencies. The `include` allowlist in `Cargo.toml` limits the published crate to source, tests and shared vectors, examples, benches, README, and license plus Cargo-generated manifest and lockfile metadata. CI and tag-triggered publishing run a RustSec advisory scan against the locked graph. Tagging and publishing are separate release actions.
 
+## Acknowledgments
+
+OpenAI Codex assisted with the v0.2.0 implementation and release review. Miz Causevic maintains and publishes this project.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
