@@ -1,14 +1,15 @@
 [package]
 name        = "hash-attestation"
-version     = "0.1.1"
+version     = "0.1.2"
 edition     = "2021"
 rust-version = "1.88"
-description = "Sign and verify Kinetic Gain Protocol Suite documents using ed25519 over canonical JSON hashes. The missing 'this AEO actually came from the vendor' layer. Optional audit-stream-py integration via the `audit-stream` feature."
+description = "Sign JSON document hashes with Ed25519 and verify them against independently trusted public keys."
 license     = "MIT"
 repository  = "https://github.com/mizcausevic-dev/hash-attestation-rs"
 homepage    = "https://kineticgain.com/"
 documentation = "https://docs.rs/hash-attestation"
 readme      = "README.md"
+include     = ["src/**/*.rs", "tests/**/*.rs", "examples/**/*.rs", "benches/**/*.rs", "README.md", "LICENSE"]
 keywords    = ["attestation", "ed25519", "kinetic-gain", "canonical-json", "signature"]
 categories  = ["cryptography", "data-structures"]
 authors     = ["Miz Causevic <miz@kineticgain.com>"]

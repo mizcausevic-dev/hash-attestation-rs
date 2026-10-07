@@ -1,121 +1,77 @@
 # hash-attestation
 
 [![CI](https://github.com/mizcausevic-dev/hash-attestation-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/mizcausevic-dev/hash-attestation-rs/actions/workflows/ci.yml)
-[![Rust](https://img.shields.io/badge/rust-1.86%2B-orange)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-orange)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Sign and verify Kinetic Gain Protocol Suite documents** using ed25519 signatures over the same canonical-hash convention every other Suite repo already uses (`sha256:<hex>` over sorted-keys, no-whitespace JSON).
-
-The missing "this AEO actually came from the vendor" layer.
+Sign Kinetic Gain Protocol Suite JSON documents with Ed25519 and verify their content against a **previously trusted public key**. This crate provides local signing and verification. It does not fetch keys or establish who owns them.
 
 ```rust
-use hash_attestation::{Attestation, Attestor};
+use hash_attestation::{Attestation, Attestor, Verifier};
 use ed25519_dalek::SigningKey;
 use rand_core::OsRng;
 
-let key = SigningKey::generate(&mut OsRng);
-let attestor = Attestor::new(key.clone(), "https://acme.example/keys/aeo".to_string());
+fn main() -> Result<(), hash_attestation::AttestationError> {
+    let key = SigningKey::generate(&mut OsRng);
+    let key_url = "https://acme.example/keys/aeo";
+    let attestor = Attestor::new(key, key_url.to_string());
+    let body = serde_json::json!({"aeo_version": "0.1", "entity": {"name": "Acme"}});
+    let signed: Attestation = attestor.sign(&body)?;
 
-let body = serde_json::json!({
-    "aeo_version": "0.1",
-    "entity": { "id": "https://acme.example/#org", "name": "Acme" }
-});
-
-let signed: Attestation = attestor.sign(&body)?;
-assert!(signed.verify(&key.verifying_key(), &body).is_ok());
-# Ok::<_, hash_attestation::AttestationError>(())
+    // In production, establish this key and its vendor binding through an
+    // independently authenticated source. Do not trust a key merely because
+    // the attestation supplies a URL for it.
+    let mut verifier = Verifier::new();
+    verifier.trust(key_url, attestor.verifying_key());
+    verifier.verify_for_key_url(key_url, &signed, &body)?;
+    Ok(())
+}
 ```
 
----
+## Trust boundary
 
-## Why
+The signature covers the `signed_hash` text, which is a `sha256:<hex>` digest of the canonicalized document. A successful check means the document content matches a signature made by the registered key. It proves vendor provenance only if the caller has independently authenticated that key and bound it to the expected vendor and document.
 
-Today a consumer fetches an AEO doc (or agent-card, or decision-card) over HTTPS and trusts the bytes came from the published origin. That covers typo-grade tampering and not much else: a misconfigured CDN, a route hijack, a developer with write access who shouldn't have had it — none of them are visible to the consumer.
+- `Verifier::trust(key_url, key)` registers a key supplied by the caller. It does not download or authenticate the URL. Re-registering a URL replaces its key.
+- `Verifier::verify` accepts any key in that trust set. For a vendor-specific decision, use `verify_for_key_url(expected_key_url, attestation, body)` with an expected URL obtained independently of the attestation.
+- `Attestation::verify(key, body)` checks only the supplied key and body. It does not inspect `key_url`.
+- `key_url` and `signed_at` are **not signed**. The timestamp is advisory and cannot establish signing time, freshness, or an audit chronology. This format has no replay protection or key revocation protocol.
+- A detached `<doc>.sig.json` record is straightforward. If an attestation is placed inline, pass the original document **without the attestation field** to both `sign` and `verify`; otherwise the document hash changes.
+- The hash is over the parsed JSON value, not the original byte stream. Whitespace, object key order, and duplicate object keys in raw JSON are not preserved by typical parsing. Reject duplicate keys before signing or verifying if they are meaningful in your input policy.
+- Protect the signing key outside the crate, establish key ownership through an authenticated channel, and define key rotation and revocation policy in the calling system. Fetching a key from the same compromised route as the document does not establish independent provenance.
 
-This crate adds a **detached signature layer**:
+## Canonical hash compatibility
 
-1. The vendor signs the canonical hash with an ed25519 private key.
-2. The signature + key URL ride alongside the doc (or inline in it).
-3. The vendor publishes the matching public key at a well-known URL.
-4. The consumer fetches the doc, recomputes the hash, fetches the public key, and verifies.
+The current Rust hash format sorts JSON object keys and serializes values without whitespace using `serde_json`, then hashes the resulting UTF-8 bytes. The Ed25519 signature signs the UTF-8 bytes of the resulting `sha256:<hex>` string. This is **not a versioned cross-language canonical JSON specification**.
 
-The signature commits to the **canonical hash**, not the bytes the consumer received. So whitespace, key ordering, and CDN re-encoding don't break verification — but a single character change inside any field does.
+The `procurement-decision-api` Python implementation currently uses `json.dumps(..., sort_keys=True, separators=(",", ":"))`. Its default Unicode escaping and numeric formatting can produce different hashes for the same parsed JSON:
 
----
+| JSON value | Rust serialization/hash | Python serialization/hash |
+| --- | --- | --- |
+| `{"name":"Café"}` | `{"name":"Café"}` / `sha256:659906f125d844f7081786e4a1cba739414e49a9b9061d80ce09c691b5f56602` | `{"name":"Caf\u00e9"}` / `sha256:763d71db1da1bf942dd08dc6ed73b60fd37295c93420be1a16f70017be12f5f8` |
+| `{"x":1e-7}` | `{"x":1e-7}` / `sha256:43c8e92bd5552bd45030718eb9366d6d6500623793c248666d77dca01ba337c0` | `{"x":1e-07}` / `sha256:c8b4301d31692cc55fc58ee2d4368e95e4971ac5d25036abceb45c33a05b0fcb` |
 
-## What's in the box
+Do not claim arbitrary JSON hashes are interchangeable across the Rust and Python services. A future cross-language format needs a versioned canonicalization specification, shared test vectors, and an explicit migration path for existing signed hashes. The current hash behavior stays unchanged for compatibility with published v0.1 attestations.
 
-| Type | Purpose |
-| --- | --- |
-| `canonical_hash` | `sha256:<hex>` over canonical JSON. Identical convention to `procurement-decision-api` + `aeo-validator-service` — same input bytes, same hash, across the portfolio. |
-| `Attestor` | Wraps a `SigningKey` with the public key URL so every produced `Attestation` is self-describing. |
-| `Attestation` | Serde-serialisable envelope: `algorithm`, `signed_hash`, `signature` (base64 ed25519), `key_url`, `signed_at`. Drop it next to the doc as `<doc>.sig.json` or fold it inline. |
-| `Verifier` | A trust set — `key_url -> VerifyingKey`. Register keys up-front, verify by URL lookup. |
+## Optional audit-stream feature
 
----
+`audit-stream` adds best-effort event emission to `AUDIT_STREAM_URL` after signing or verification. It sends `attestation_signed`, `attestation_verified`, or `attestation_failed` to `/events`. An outage does not change the cryptographic result, but the call can wait for its configured timeout. `AUDIT_STREAM_TIMEOUT_S` defaults to 2.5 seconds and is capped at 30 seconds. Treat these events as operational telemetry; they do not authenticate the unsigned `signed_at` field.
 
-## End-to-end shape
+The optional event includes `key_url`, `signed_hash`, `signed_at`, and the outcome; failed verification also includes an error reason. It does not send the document body or private key. Configure `AUDIT_STREAM_URL` only for an endpoint authorized to receive this metadata.
 
-```text
-vendor side                                  consumer side
------------                                  -------------
-SigningKey                                   Verifier (trust set)
-   │                                            │
-   ▼                                            ▼
-Attestor::new(key, key_url)                  Verifier::trust(key_url, public_key)
-   │                                            ▲
-   ▼                                            │
-.sign(doc) → Attestation ───── published ─────► .verify(attestation, doc)
-                                                returns Ok or AttestationError
-```
-
-When a `Verifier::verify` call returns:
-
-- `Ok(())` — the doc is unmodified vs. the moment the vendor signed it AND the signature checks out against the trusted public key.
-- `Err(HashMismatch { … })` — the doc has changed since it was signed.
-- `Err(BadSignature)` — the signature doesn't match the key.
-- `Err(UntrustedKey(…))` — the `key_url` in the attestation isn't in your trust set.
-- `Err(UnsupportedAlgorithm(…))` — v0.1 only knows ed25519.
-
----
-
-## Composes with
-
-- **[aeo-validator-service](https://github.com/mizcausevic-dev/aeo-validator-service)** — verifies the attestation alongside drift; tamper events surface as a structured issue.
-- **[procurement-decision-api](https://github.com/mizcausevic-dev/procurement-decision-api)** — every Decision Card can be paired with a signature so downstream policy bundles can prove provenance.
-- **[aeo-graph-explorer-rs](https://github.com/mizcausevic-dev/aeo-graph-explorer-rs)** — same canonical-hash convention means the explorer's `content_hash` field is what this crate signs.
-- **[incident-correlation-rs](https://github.com/mizcausevic-dev/incident-correlation-rs)** — if an `IncidentCard` flags "we don't trust this vendor's AEO anymore", removing the vendor's `key_url` from the verifier is one atomic update away.
-
----
-
-## Algorithm note
-
-v0.1 is ed25519-only. The algorithm field is included on every attestation so a future v0.2 can add (e.g.) ECDSA-P256 without breaking existing verifiers. Unknown algorithms fail closed.
-
----
-
-## Bench
+## Checks and packaging
 
 ```bash
-cargo bench
-```
-
-Bundled bench measures `sign` and `verify` separately so you can spot regressions in either path.
-
----
-
-## Tests
-
-```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -Dwarnings
 cargo test --all-targets
 cargo test --doc
-cargo clippy --all-targets -- -Dwarnings
-cargo fmt --all -- --check
+cargo clippy --features audit-stream --all-targets -- -Dwarnings
+cargo test --features audit-stream --all-targets
+cargo package --list
 ```
 
-CI matrix: `stable`, `beta`, `1.86.0` (MSRV).
-
----
+CI targets stable, beta, and Rust 1.88.0 (MSRV). The `include` allowlist in `Cargo.toml` limits the published crate to source, tests, examples, benches, README, and license plus Cargo-required manifest metadata. A tag-triggered publish workflow reruns checks before a crates.io upload; tagging and publishing are separate release actions.
 
 ## License
 

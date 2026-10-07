@@ -92,6 +92,47 @@ fn verifier_rejects_untrusted_key_url() {
 }
 
 #[test]
+fn vendor_specific_verification_rejects_another_trusted_vendor() {
+    let (key_a, _vendor_a) = keypair_and_attestor("https://vendor-a.example/keys/aeo");
+    let (key_b, vendor_b) = keypair_and_attestor("https://vendor-b.example/keys/aeo");
+    let signed_by_b = vendor_b.sign(&body()).unwrap();
+
+    let mut verifier = Verifier::new();
+    verifier.trust("https://vendor-a.example/keys/aeo", key_a.verifying_key());
+    verifier.trust("https://vendor-b.example/keys/aeo", key_b.verifying_key());
+
+    // Generic verification is valid for B's key, but a request for A's
+    // document must bind to A's independently known key URL.
+    assert!(verifier.verify(&signed_by_b, &body()).is_ok());
+    let err = verifier
+        .verify_for_key_url("https://vendor-a.example/keys/aeo", &signed_by_b, &body())
+        .unwrap_err();
+    assert!(matches!(err, AttestationError::UntrustedKey(_)));
+    assert!(verifier
+        .verify_for_key_url("https://vendor-b.example/keys/aeo", &signed_by_b, &body())
+        .is_ok());
+
+    let mut switched_selector = signed_by_b.clone();
+    switched_selector.key_url = "https://vendor-a.example/keys/aeo".to_string();
+    let err = verifier
+        .verify_for_key_url(
+            "https://vendor-a.example/keys/aeo",
+            &switched_selector,
+            &body(),
+        )
+        .unwrap_err();
+    assert!(matches!(err, AttestationError::BadSignature));
+}
+
+#[test]
+fn advisory_timestamp_is_not_authenticated() {
+    let (key, attestor) = keypair_and_attestor("https://acme.example/keys/aeo");
+    let mut signed = attestor.sign(&body()).unwrap();
+    signed.signed_at = "1900-01-01T00:00:00Z".to_string();
+    assert!(signed.verify(&key.verifying_key(), &body()).is_ok());
+}
+
+#[test]
 fn attestation_round_trips_through_json() {
     let (_key, attestor) = keypair_and_attestor("https://acme.example/keys/aeo");
     let signed = attestor.sign(&body()).unwrap();

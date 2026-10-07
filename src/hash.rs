@@ -1,6 +1,6 @@
-//! Canonical-hash function. Identical convention to `procurement-decision-api`
-//! and `aeo-validator-service`, so the same input bytes produce the same hash
-//! across the portfolio.
+//! Canonical-hash function for this crate. Other languages may serialize
+//! Unicode and floating-point values differently; see the README before
+//! relying on cross-language hash equality.
 
 use sha2::{Digest, Sha256};
 

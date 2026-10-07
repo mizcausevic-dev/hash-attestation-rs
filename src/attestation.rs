@@ -18,8 +18,12 @@ use crate::hash::canonical_hash;
 /// - `algorithm` — frozen as `"ed25519"` for v0.1.
 /// - `signed_hash` — the canonical hash of the body at the time of signing.
 /// - `signature` — base64-encoded 64-byte ed25519 signature over `signed_hash`.
-/// - `key_url` — well-known URL where the verifier can fetch the public key.
-/// - `signed_at` — RFC-3339-ish UTC timestamp string.
+/// - `key_url` — a key selector, not a trusted key discovery mechanism.
+/// - `signed_at` — an advisory UTC timestamp string.
+///
+/// The signature covers only `signed_hash`. It does not authenticate
+/// `key_url` or `signed_at`; neither field proves vendor identity or signing
+/// time. Establish the trusted key and expected vendor independently.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Attestation {
     /// The signature algorithm. Frozen as `"ed25519"` for v0.1.
@@ -28,9 +32,9 @@ pub struct Attestation {
     pub signed_hash: String,
     /// Base64-encoded 64-byte ed25519 signature over `signed_hash` (as UTF-8 bytes).
     pub signature: String,
-    /// Public key URL the verifier should trust.
+    /// Public key URL selector. The verifier must establish trust separately.
     pub key_url: String,
-    /// UTC timestamp the signature was minted.
+    /// Advisory UTC timestamp. This value is not signed.
     pub signed_at: String,
 }
 
@@ -47,7 +51,9 @@ impl Attestation {
         }
     }
 
-    /// Verify this attestation against the body it was meant to sign.
+    /// Verify this attestation against the body it was meant to sign, using
+    /// the caller-supplied key. This method does not check `key_url` or prove
+    /// which vendor owns the key.
     pub fn verify<T: Serialize>(
         &self,
         verifying_key: &VerifyingKey,

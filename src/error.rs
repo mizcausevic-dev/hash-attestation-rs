@@ -35,8 +35,8 @@ pub enum AttestationError {
     #[error("unsupported algorithm: {0}")]
     UnsupportedAlgorithm(String),
 
-    /// The caller asked [`crate::Verifier::verify`] for a key URL that
-    /// wasn't in the trust set.
+    /// The attestation's key URL was absent from the trust set or did not
+    /// match the caller's independently expected URL.
     #[error("untrusted key URL: {0}")]
     UntrustedKey(String),
 }
