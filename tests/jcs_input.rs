@@ -15,13 +15,17 @@ impl Serialize for DuplicateFields {
 }
 
 #[test]
-fn strict_parse_rejects_duplicate_keys_and_unsafe_integers() {
+fn strict_parse_rejects_duplicate_keys_and_lossy_numbers() {
     for raw in [
         r#"{"x":1,"x":2}"#,
         r#"{"nested":{"x":1,"x":2}}"#,
         r#"{"x":9007199254740992}"#,
         r#"{"x":18446744073709551616}"#,
         r#"{"x":-9007199254740992}"#,
+        r#"{"x":1e-1000}"#,
+        r#"{"x":-1e-1000}"#,
+        r#"{"x":[{"y":1.5e-1000}]}"#,
+        r#"{"x":1e-999999999999999999999999999999}"#,
         r#"{"x":"\uD800"}"#,
     ] {
         assert!(parse_jcs_json_strict(raw).is_err(), "accepted: {raw}");
@@ -29,6 +33,10 @@ fn strict_parse_rejects_duplicate_keys_and_unsafe_integers() {
     assert!(parse_jcs_json_strict(r#"{"x":9007199254740991}"#).is_ok());
     assert!(parse_jcs_json_strict(r#"{"x":1e20}"#).is_ok());
     assert!(parse_jcs_json_strict(r#"{"x":1e-7}"#).is_ok());
+    assert!(parse_jcs_json_strict(r#"{"x":0e-1000}"#).is_ok());
+    assert!(parse_jcs_json_strict(r#"{"x":-0e-1000}"#).is_ok());
+    assert!(parse_jcs_json_strict(r#"{"x":5e-324}"#).is_ok());
+    assert!(parse_jcs_json_strict(r#"{"x":"1e-1000"}"#).is_ok());
 }
 
 #[test]
@@ -56,8 +64,15 @@ fn raw_sign_and_verify_reject_lossy_input() {
         .unwrap();
     signed.verify_raw_json(&key.verifying_key(), raw).unwrap();
     assert!(attestor.sign_raw_json(r#"{"x":1,"x":2}"#).is_err());
+    assert!(attestor.sign_raw_json(r#"{"x":1e-1000}"#).is_err());
+    assert!(signed
+        .verify_raw_json(&key.verifying_key(), r#"{"name":"Café","x":1e-1000}"#)
+        .is_err());
     assert!(verifier
         .verify_raw_json_for_key_url(key_url, &signed, r#"{"name":"Café","x":1e-7,"x":1e-7}"#)
+        .is_err());
+    assert!(verifier
+        .verify_raw_json_for_key_url(key_url, &signed, r#"{"name":"Café","x":1e-1000}"#)
         .is_err());
 }
 

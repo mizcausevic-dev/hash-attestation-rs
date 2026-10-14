@@ -153,8 +153,9 @@ impl Attestation {
     }
 
     /// Strictly parse an untrusted JSON body before verifying. This rejects
-    /// duplicate keys and unsafe integer literals before they can be lost in
-    /// an ordinary `serde_json::Value` parse.
+    /// duplicate keys, unsafe integer literals, and nonzero numbers that
+    /// underflow to zero before they can be lost in an ordinary
+    /// `serde_json::Value` parse.
     pub fn verify_raw_json(
         &self,
         verifying_key: &VerifyingKey,

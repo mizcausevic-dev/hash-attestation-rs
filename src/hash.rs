@@ -42,19 +42,19 @@ pub fn canonical_hash_jcs<T: serde::Serialize>(value: &T) -> Result<String, Atte
 }
 
 /// Parse raw JSON for the JCS profile, rejecting duplicate object keys,
-/// unpaired Unicode surrogates, and integer values outside the interoperable
-/// IEEE-754 safe integer range. Normal JSON whitespace and key order are
+/// unpaired Unicode surrogates, unsafe integers, and nonzero numeric literals
+/// that underflow to IEEE-754 zero. Normal JSON whitespace and key order are
 /// accepted. A pre-parsed JSON value cannot recover discarded duplicate keys.
 pub fn parse_jcs_json_strict(raw: &str) -> Result<serde_json::Value, AttestationError> {
     parse_jcs_json_strict_bytes(raw.as_bytes())
 }
 
 fn parse_jcs_json_strict_bytes(raw: &[u8]) -> Result<serde_json::Value, AttestationError> {
-    reject_unsafe_integer_literals(raw)?;
+    reject_lossy_number_literals(raw)?;
     Ok(serde_json::from_slice::<StrictJsonValue>(raw)?.0)
 }
 
-fn reject_unsafe_integer_literals(raw: &[u8]) -> Result<(), AttestationError> {
+fn reject_lossy_number_literals(raw: &[u8]) -> Result<(), AttestationError> {
     const SAFE: i128 = 9_007_199_254_740_991;
     let mut i = 0;
     let mut quoted = false;
@@ -74,7 +74,21 @@ fn reject_unsafe_integer_literals(raw: &[u8]) -> Result<(), AttestationError> {
                     i += 1;
                 }
                 let number = &raw[start..i];
-                if !number.iter().any(|b| matches!(b, b'.' | b'e' | b'E')) {
+                if number.iter().any(|b| matches!(b, b'.' | b'e' | b'E')) {
+                    let mantissa = number
+                        .split(|b| matches!(b, b'e' | b'E'))
+                        .next()
+                        .unwrap_or(number);
+                    let nonzero = mantissa.iter().any(|b| matches!(b, b'1'..=b'9'));
+                    let parsed = std::str::from_utf8(number)
+                        .ok()
+                        .and_then(|s| s.parse::<f64>().ok());
+                    if nonzero && parsed.is_some_and(|value| value == 0.0) {
+                        return Err(AttestationError::InvalidJcsInput(
+                            "nonzero number underflows to IEEE-754 zero".to_string(),
+                        ));
+                    }
+                } else {
                     let integer = std::str::from_utf8(number)
                         .ok()
                         .and_then(|s| s.parse::<i128>().ok());

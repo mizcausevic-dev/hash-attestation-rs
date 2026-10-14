@@ -33,7 +33,8 @@ impl Attestor {
     }
 
     /// Sign untrusted raw JSON with the v0.2 format after strict I-JSON input
-    /// checks. Use this entry point when the source is a JSON text stream.
+    /// checks, including rejection of nonzero numbers that underflow to zero.
+    /// Use this entry point when the source is a JSON text stream.
     pub fn sign_raw_json(&self, raw_body: &str) -> Result<Attestation, AttestationError> {
         let body = parse_jcs_json_strict(raw_body)?;
         self.sign(&body)
@@ -149,7 +150,8 @@ impl Verifier {
     }
 
     /// Verify an untrusted raw JSON body for an independently expected key
-    /// URL. Rejects duplicate keys and unsafe integer literals before parse.
+    /// URL. Rejects duplicate keys, unsafe integer literals, and nonzero
+    /// numbers that underflow to zero before parse.
     pub fn verify_raw_json_for_key_url(
         &self,
         expected_key_url: &str,
