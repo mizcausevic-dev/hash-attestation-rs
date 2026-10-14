@@ -1,6 +1,6 @@
 [package]
 name        = "hash-attestation"
-version     = "0.2.0"
+version     = "0.2.1"
 edition     = "2021"
 rust-version = "1.88"
 description = "Sign JSON document hashes with Ed25519 and verify them against independently trusted public keys."
